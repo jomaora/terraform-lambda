@@ -31,11 +31,11 @@ resource "aws_lambda_function" "lambda-poc" {
   runtime   = "nodejs20.x"
 
   role      = "${aws_iam_role.iam_for_lambda.arn}"
-  #environment {
-  #  variables = {
-  #    foo = "bar"
-  #  }
-  #}
+  environment {
+    variables = {
+      NODE_ENV = "test"
+    }
+  }
 }
 
 #manque cloudwatch pour le logs (ou équivalent)
