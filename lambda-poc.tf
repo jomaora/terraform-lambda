@@ -40,70 +40,34 @@ resource "aws_lambda_function" "lambda-poc" {
 
 #manque cloudwatch pour le logs (ou équivalent)
 
-resource "aws_api_gateway_rest_api" "automatic-poc" {
-  name        = "ApiGatewayAutomatique"
-  description = "POC"
+resource "aws_apigatewayv2_api" "poc_api" {
+  name          = "poc_api"
+  protocol_type = "HTTP"
 }
 
-resource "aws_api_gateway_resource" "automatic-poc-proxy" {
-  rest_api_id = "${aws_api_gateway_rest_api.automatic-poc.id}"
-  parent_id   = "${aws_api_gateway_rest_api.automatic-poc.root_resource_id}"
-  path_part   = "{proxy+}"
+resource "aws_apigatewayv2_integration" "lambda_integration" {
+  api_id              = aws_apigatewayv2_api.poc_api.id
+  integration_type    = "AWS_PROXY"
+  integration_uri     = aws_lambda_function.lambda-poc.invoke_arn
+  payload_format_version = "2.0"
 }
 
-resource "aws_api_gateway_method" "proxy-method-for-poc" {
-  rest_api_id   = "${aws_api_gateway_rest_api.automatic-poc.id}"
-  resource_id   = "${aws_api_gateway_resource.automatic-poc-proxy.id}"
-  http_method   = "POST"
-  authorization = "NONE"
+resource "aws_apigatewayv2_route" "lambda_route" {
+  api_id    = aws_apigatewayv2_api.poc_api.id
+  route_key = "POST /poc"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
 }
 
-# config to link the api gateway with the lamba
-resource "aws_api_gateway_integration" "lambda-integration" {
-  rest_api_id = "${aws_api_gateway_rest_api.automatic-poc.id}"
-  resource_id = "${aws_api_gateway_method.proxy-method-for-poc.resource_id}"
-  http_method = "${aws_api_gateway_method.proxy-method-for-poc.http_method}"
-
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.lambda-poc.invoke_arn}"
-}
-
-# root
-resource "aws_api_gateway_method" "proxy_root" {
-  rest_api_id   = "${aws_api_gateway_rest_api.automatic-poc.id}"
-  resource_id   = "${aws_api_gateway_rest_api.automatic-poc.root_resource_id}"
-  http_method   = "POST"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_integration" "lambda_root_integration" {
-  rest_api_id = "${aws_api_gateway_rest_api.automatic-poc.id}"
-  resource_id = "${aws_api_gateway_method.proxy_root.resource_id}"
-  http_method = "${aws_api_gateway_method.proxy_root.http_method}"
-
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.lambda-poc.invoke_arn}"
-}
-
-resource "aws_api_gateway_deployment" "lambda-poc" {
-  depends_on = [
-    "aws_api_gateway_integration.lambda-integration",
-    "aws_api_gateway_integration.lambda_root_integration",
-  ]
-
-  rest_api_id = "${aws_api_gateway_rest_api.automatic-poc.id}"
-  stage_name  = "test"
-}
-
-resource "aws_lambda_permission" "apigw" {
+resource "aws_lambda_permission" "apigw_lambda" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.lambda-poc.function_name}"
+  function_name = aws_lambda_function.lambda-poc.function_name
   principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.poc_api.execution_arn}/*/*"
+}
 
-  # The /*/* portion grants access from any method on any resource
-  # within the API Gateway "REST API".
-  source_arn = "${aws_api_gateway_rest_api.automatic-poc.execution_arn}/*/*"
+resource "aws_apigatewayv2_stage" "test" {
+  api_id = aws_apigatewayv2_api.poc_api.id
+  name   = "test"
+  auto_deploy = true
 }
