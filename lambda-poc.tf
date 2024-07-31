@@ -1,6 +1,13 @@
-provider "aws" {
-  region = "eu-west-3"
+variable "region" {
+  default     = "eu-west-3"
+  description = "AWS Region"
 }
+
+provider "aws" {
+  region = var.region
+}
+
+data "aws_caller_identity" "current" {}
 
 data "aws_iam_policy_document" "lambda_iam_assume_role_policy" {
   statement {
@@ -18,8 +25,35 @@ data "aws_iam_policy_document" "lambda_iam_assume_role_policy" {
 }
 
 resource "aws_iam_role" "iam_for_lambda" {
-  name = "iam-for-lambda-poc"
+  name               = "iam-for-lambda-poc"
   assume_role_policy = data.aws_iam_policy_document.lambda_iam_assume_role_policy.json
+}
+
+data "aws_iam_policy_document" "lambda_logging_policy" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogGroup",
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = ["arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${aws_lambda_function.lambda-poc.function_name}:*"]
+  }
+}
+
+resource "aws_iam_policy" "lambda_logging" {
+  name   = "lambda-logging-policy"
+  policy = data.aws_iam_policy_document.lambda_logging_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_logging" {
+  role       = aws_iam_role.iam_for_lambda.name
+  policy_arn = aws_iam_policy.lambda_logging.arn
+}
+
+resource "aws_cloudwatch_log_group" "lambda_poc_log_group" {
+  name              = "/aws/lambda/${aws_lambda_function.lambda-poc.function_name}"
+  retention_in_days = 14
 }
 
 resource "aws_lambda_function" "lambda-poc" {
@@ -37,8 +71,6 @@ resource "aws_lambda_function" "lambda-poc" {
     }
   }
 }
-
-#manque cloudwatch pour le logs (ou équivalent)
 
 resource "aws_apigatewayv2_api" "poc_api" {
   name          = "poc_api"
