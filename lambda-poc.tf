@@ -59,6 +59,7 @@ resource "aws_cloudwatch_log_group" "lambda_poc_log_group" {
 resource "aws_lambda_function" "lambda-poc" {
   function_name = "api-gw-lamba-poc"
 
+  architectures = ["arm64"]
   s3_bucket = "jojo-lambda-poc"
   s3_key    = "lambda.poc.zip"
   handler   = "src/index.handler"
